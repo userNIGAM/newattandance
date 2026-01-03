@@ -1,4 +1,10 @@
-// server.js or app.js
+import dotenv from 'dotenv';
+
+// Load environment variables FIRST
+dotenv.config();
+
+console.log('[dotenv] Environment variables loaded');
+console.log('SMTP_USER configured:', process.env.SMTP_USER ? 'Yes' : 'No');
 import express, { json, urlencoded } from 'express';
 import cors from 'cors';
 // import { connection } from 'mongoose';

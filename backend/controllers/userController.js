@@ -2,6 +2,7 @@
 import User from '../models/User.js';
 import { toDataURL } from 'qrcode';
 import { randomBytes } from 'crypto';
+import { sendRegistrationEmail } from '../utils/emailService.js';
 
 // Define faculty types
 const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
@@ -10,7 +11,7 @@ const yearlyFaculties = ['BBS', 'BA', 'BSW'];
 // Validation helper functions
 const validateStudentData = (data) => {
   const errors = {};
-  
+
   // Required fields
   const requiredFields = ['name', 'email', 'faculty', 'rollno', 'contact', 'address'];
   requiredFields.forEach(field => {
@@ -25,8 +26,7 @@ const validateStudentData = (data) => {
   }
 
   // Contact validation (Nepali format: 98XXXXXXXX)
-  if (data.contact && !/^(97|98)\d{8}$/.test(data.contact.replace(/\D/g, '')))
- {
+  if (data.contact && !/^(97|98)\d{8}$/.test(data.contact.replace(/\D/g, ''))) {
     errors.contact = 'Phone number must start with 98 and be 10 digits total';
   }
 
@@ -50,7 +50,7 @@ const validateStudentData = (data) => {
       } else if (parseInt(data.semester) < 1 || parseInt(data.semester) > 8) {
         errors.semester = 'Please select a valid semester (1-8)';
       }
-      
+
       // Reject year field if provided for semester-based faculty
       if (data.year !== undefined && data.year !== null && data.year.toString().trim() !== '') {
         errors.year = 'Year field is not applicable for semester-based faculties';
@@ -62,7 +62,7 @@ const validateStudentData = (data) => {
       } else if (parseInt(data.year) < 1 || parseInt(data.year) > 4) {
         errors.year = 'Please select a valid year (1-4)';
       }
-      
+
       // Reject semester field if provided for yearly-based faculty
       if (data.semester !== undefined && data.semester !== null && data.semester.toString().trim() !== '') {
         errors.semester = 'Semester field is not applicable for yearly-based faculties';
@@ -123,7 +123,7 @@ export async function registerUser(req, res) {
     } = req.body;
 
     console.log('Registration request:', req.body);
-    
+
     // Step 1: Basic validation
     const validation = validateStudentData({
       name, email, faculty, semester, year, rollno, contact, address
@@ -139,10 +139,10 @@ export async function registerUser(req, res) {
     }
 
     // Step 2: Check if email already exists (Global email uniqueness)
-    const existingEmail = await User.findOne({ 
-      email: email.toLowerCase().trim() 
+    const existingEmail = await User.findOne({
+      email: email.toLowerCase().trim()
     });
-    
+
     if (existingEmail) {
       console.log("Email already exists");
       return res.status(400).json({
@@ -185,10 +185,9 @@ export async function registerUser(req, res) {
         success: false,
         message: 'Student already registered',
         errors: {
-          rollno: `Student with roll number ${rollno} is already registered in ${faculty} ${
-            semesterFaculties.includes(faculty) ? `Semester ${semester}` : 
+          rollno: `Student with roll number ${rollno} is already registered in ${faculty} ${semesterFaculties.includes(faculty) ? `Semester ${semester}` :
             yearlyFaculties.includes(faculty) ? `Year ${year}` : ''
-          }`
+            }`
         }
       });
     }
@@ -264,14 +263,40 @@ export async function registerUser(req, res) {
         message: 'Failed to generate QR code'
       });
     }
-    
+
     user.qrCode = qrCode;
     user.qrData = JSON.parse(qrData);
 
     // Step 10: Save to database
     await user.save();
 
-    // Step 11: Prepare response (exclude sensitive data)
+    // Step 11: Send registration email with QR code
+    let emailSent = false;
+    let emailError = null;
+
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const emailData = {
+          name: user.name,
+          email: user.email,
+          faculty: user.faculty,
+          rollno: user.rollno,
+          semester: user.semester || null,
+          year: user.year || null,
+          registrationId: user._id.toString(),
+          registrationDate: user.createdAt
+        };
+
+        await sendRegistrationEmail(emailData, qrCode);
+        emailSent = true;
+        console.log(`✅ Registration email sent to ${user.email}`);
+      } catch (emailError) {
+        console.error('⚠️ Failed to send email (registration still successful):', emailError.message);
+        emailError = emailError.message;
+      }
+    }
+
+    // Step 12: Prepare response
     const userResponse = {
       _id: user._id,
       name: user.name,
@@ -282,7 +307,8 @@ export async function registerUser(req, res) {
       address: user.address,
       qrCode: user.qrCode,
       registrationDate: user.createdAt,
-      attendanceCount: user.attendanceLogs?.length || 0
+      attendanceCount: user.attendanceLogs?.length || 0,
+      emailSent: emailSent
     };
 
     // Add appropriate field based on faculty type
@@ -292,36 +318,42 @@ export async function registerUser(req, res) {
       userResponse.year = user.year;
     }
 
+    const responseMessage = emailSent
+      ? 'Student registered successfully. Check your email for QR code.'
+      : 'Student registered successfully. Please save your QR code below.';
+
     res.status(201).json({
       success: true,
-      message: 'Student registered successfully',
+      message: responseMessage,
       user: userResponse,
       qrCode: user.qrCode,
-      registrationId: user._id
+      registrationId: user._id,
+      emailSent: emailSent,
+      emailError: emailError
     });
 
   } catch (error) {
     console.error('Registration error:', error);
-    
+
     // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
       const errors = {};
       Object.keys(error.errors).forEach(key => {
         errors[key] = error.errors[key].message;
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
         errors
       });
     }
-    
+
     // Handle duplicate key errors (unique constraints)
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       let message = '';
-      
+
       switch (field) {
         case 'email':
           message = 'Email already registered';
@@ -335,14 +367,14 @@ export async function registerUser(req, res) {
         default:
           message = 'Duplicate field value';
       }
-      
+
       return res.status(400).json({
         success: false,
         message,
         errors: { [field]: message }
       });
     }
-    
+
     // Handle other errors
     res.status(500).json({
       success: false,
@@ -356,7 +388,7 @@ export async function registerUser(req, res) {
 export async function validateRegistration(req, res) {
   try {
     const { email, faculty, semester, year, rollno } = req.body;
-    
+
     const validationResults = {
       email: { available: true, message: '' },
       rollno: { available: true, message: '' },
@@ -365,10 +397,10 @@ export async function validateRegistration(req, res) {
 
     // Check email availability
     if (email) {
-      const emailExists = await User.findOne({ 
-        email: email.toLowerCase().trim() 
+      const emailExists = await User.findOne({
+        email: email.toLowerCase().trim()
       });
-      
+
       if (emailExists) {
         validationResults.email.available = false;
         validationResults.email.message = 'Email already registered';
@@ -378,7 +410,7 @@ export async function validateRegistration(req, res) {
     // Check roll number availability with faculty context
     if (rollno && faculty) {
       const cleanRollno = rollno.toUpperCase().trim();
-      
+
       let rollnoQuery = {
         faculty,
         rollno: cleanRollno
@@ -392,13 +424,12 @@ export async function validateRegistration(req, res) {
       }
 
       const rollnoExists = await User.findOne(rollnoQuery);
-      
+
       if (rollnoExists) {
         validationResults.rollno.available = false;
-        validationResults.rollno.message = `Roll number already registered in ${faculty} ${
-          semesterFaculties.includes(faculty) ? `Semester ${semester}` : 
+        validationResults.rollno.message = `Roll number already registered in ${faculty} ${semesterFaculties.includes(faculty) ? `Semester ${semester}` :
           yearlyFaculties.includes(faculty) ? `Year ${year}` : ''
-        }`;
+          }`;
       }
 
       // Additional check: Same rollno with different email
@@ -435,7 +466,7 @@ export async function validateRegistration(req, res) {
 export async function getStudentByIdentifier(req, res) {
   try {
     const { faculty, rollno, semester, year } = req.query;
-    
+
     if (!faculty || !rollno) {
       return res.status(400).json({
         success: false,
@@ -483,7 +514,7 @@ export async function getStudentByIdentifier(req, res) {
 export async function canRegister(req, res) {
   try {
     const { email, faculty, rollno, semester, year } = req.body;
-    
+
     const checks = {
       emailAvailable: true,
       rollnoAvailable: true,
@@ -511,9 +542,9 @@ export async function canRegister(req, res) {
     // 3. Check roll number with faculty context
     if (rollno && faculty) {
       const cleanRollno = rollno.toUpperCase().trim();
-      
+
       let query = { faculty, rollno: cleanRollno };
-      
+
       // Add context based on faculty type
       if (semesterFaculties.includes(faculty)) {
         if (semester && semester.toString().trim() !== '') {
@@ -573,12 +604,14 @@ export async function findDuplicates(req, res) {
             year: "$year"
           },
           count: { $sum: 1 },
-          users: { $push: {
-            _id: "$_id",
-            name: "$name",
-            email: "$email",
-            createdAt: "$createdAt"
-          }}
+          users: {
+            $push: {
+              _id: "$_id",
+              name: "$name",
+              email: "$email",
+              createdAt: "$createdAt"
+            }
+          }
         }
       },
       {
@@ -610,7 +643,7 @@ export async function findDuplicates(req, res) {
 export async function validateBatchRegistration(req, res) {
   try {
     const { students } = req.body;
-    
+
     if (!Array.isArray(students) || students.length === 0) {
       return res.status(400).json({
         success: false,
@@ -626,7 +659,7 @@ export async function validateBatchRegistration(req, res) {
       try {
         // Basic validation
         const validation = validateStudentData(student);
-        
+
         if (!validation.isValid) {
           errors.push({
             index,
@@ -637,8 +670,8 @@ export async function validateBatchRegistration(req, res) {
         }
 
         // Check email uniqueness
-        const emailExists = await User.findOne({ 
-          email: student.email.toLowerCase().trim() 
+        const emailExists = await User.findOne({
+          email: student.email.toLowerCase().trim()
         });
 
         if (emailExists) {
