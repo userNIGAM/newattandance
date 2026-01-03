@@ -9,6 +9,7 @@ import express, { json, urlencoded } from 'express';
 import cors from 'cors';
 // import { connection } from 'mongoose';
 import userRoutes from './routes/userRoutes.js';
+import attendanceRoutes from './routes/attendanceRoutes.js';
 import connectDB from './config/connectDB.js';
 
 const app = express();
@@ -23,6 +24,7 @@ connectDB();
 
 // Routes
 app.use('/api/users', userRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
