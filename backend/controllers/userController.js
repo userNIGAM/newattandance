@@ -3,6 +3,10 @@ import User from '../models/User.js';
 import { toDataURL } from 'qrcode';
 import { randomBytes } from 'crypto';
 
+// Define faculty types
+const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
+const yearlyFaculties = ['BBS', 'BA', 'BSW'];
+
 // Validation helper functions
 const validateStudentData = (data) => {
   const errors = {};
@@ -21,7 +25,8 @@ const validateStudentData = (data) => {
   }
 
   // Contact validation (Nepali format: 98XXXXXXXX)
-  if (data.contact && !/^98\d{8}$/.test(data.contact.replace(/\D/g, ''))) {
+  if (data.contact && !/^(97|98)\d{8}$/.test(data.contact.replace(/\D/g, '')))
+ {
     errors.contact = 'Phone number must start with 98 and be 10 digits total';
   }
 
@@ -36,18 +41,39 @@ const validateStudentData = (data) => {
     errors.faculty = 'Please select a valid faculty';
   }
 
-  // Conditional validation for semester/year
-  const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
-  const yearlyFaculties = ['BBS', 'BA', 'BSW'];
-
+  // Conditional validation for semester/year based on faculty type
   if (data.faculty) {
     if (semesterFaculties.includes(data.faculty)) {
-      if (!data.semester || data.semester < 1 || data.semester > 8) {
+      // Semester-based faculties: require semester, reject year
+      if (!data.semester || data.semester.toString().trim() === '') {
+        errors.semester = 'Semester is required for this faculty';
+      } else if (parseInt(data.semester) < 1 || parseInt(data.semester) > 8) {
         errors.semester = 'Please select a valid semester (1-8)';
       }
+      
+      // Reject year field if provided for semester-based faculty
+      if (data.year !== undefined && data.year !== null && data.year.toString().trim() !== '') {
+        errors.year = 'Year field is not applicable for semester-based faculties';
+      }
     } else if (yearlyFaculties.includes(data.faculty)) {
-      if (!data.year || data.year < 1 || data.year > 4) {
+      // Yearly-based faculties: require year, reject semester
+      if (!data.year || data.year.toString().trim() === '') {
+        errors.year = 'Year is required for this faculty';
+      } else if (parseInt(data.year) < 1 || parseInt(data.year) > 4) {
         errors.year = 'Please select a valid year (1-4)';
+      }
+      
+      // Reject semester field if provided for yearly-based faculty
+      if (data.semester !== undefined && data.semester !== null && data.semester.toString().trim() !== '') {
+        errors.semester = 'Semester field is not applicable for yearly-based faculties';
+      }
+    } else {
+      // For other faculties (if any), both semester and year should be excluded
+      if (data.semester !== undefined && data.semester !== null && data.semester.toString().trim() !== '') {
+        errors.semester = 'Semester field is not applicable for this faculty';
+      }
+      if (data.year !== undefined && data.year !== null && data.year.toString().trim() !== '') {
+        errors.year = 'Year field is not applicable for this faculty';
       }
     }
   }
@@ -72,7 +98,7 @@ const generateQRData = (user) => {
     faculty: user.faculty,
     semester: user.semester || null,
     year: user.year || null,
-    eventId: 'event-2024', // You can make this dynamic
+    eventId: 'event-2024',
     timestamp: Date.now()
   });
 };
@@ -96,61 +122,15 @@ export async function registerUser(req, res) {
       address
     } = req.body;
 
-    console.log(req.body)
+    console.log('Registration request:', req.body);
+    
     // Step 1: Basic validation
     const validation = validateStudentData({
       name, email, faculty, semester, year, rollno, contact, address
     });
-function validateStudentData(data) {
-  const errors = {};
-  let isValid = true;
 
-  // Basic required fields
-  if (!data.name) {
-    isValid = false;
-    errors.name = "Name is required";
-  }
-  if (!data.email) {
-    isValid = false;
-    errors.email = "Email is required";
-  }
-  if (!data.faculty) {
-    isValid = false;
-    errors.faculty = "Faculty is required";
-  }
-
-  // Conditional validation for year/semester
-  if (data.faculty) {
-    if (data.faculty === "yearly") {
-      if (!data.year) {
-        isValid = false;
-        errors.year = "Year is required for yearly faculty";
-      }
-      if (data.semester) {
-        isValid = false;
-        errors.semester = "Semester should not be provided for yearly faculty";
-      }
-    } else if (data.faculty === "semester") {
-      if (!data.semester) {
-        isValid = false;
-        errors.semester = "Semester is required for semester-based faculty";
-      }
-      if (data.year) {
-        isValid = false;
-        errors.year = "Year should not be provided for semester-based faculty";
-      }
-    } else {
-      isValid = false;
-      errors.faculty = "Faculty type is invalid";
-    }
-  }
-
-  // Add other validations like rollno, contact, address if needed
-
-  return { isValid, errors };
-}
     if (!validation.isValid) {
-      console.log("validation error")
+      console.log("Validation error:", validation.errors);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -159,22 +139,20 @@ function validateStudentData(data) {
     }
 
     // Step 2: Check if email already exists (Global email uniqueness)
-    const existingEmail = await findOne({ 
+    const existingEmail = await User.findOne({ 
       email: email.toLowerCase().trim() 
     });
-    console.log("checking if email exists")
+    
     if (existingEmail) {
-      console.log("email exists")
+      console.log("Email already exists");
       return res.status(400).json({
         success: false,
         message: 'Email already registered',
         errors: { email: 'This email is already registered' }
       });
     }
-    console.log("Email doesnt exists")
+
     // Step 3: Determine faculty type and build unique student identifier
-    const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
-    const yearlyFaculties = ['BBS', 'BA', 'BSW'];
     let existingStudentQuery = {};
 
     if (semesterFaculties.includes(faculty)) {
@@ -200,7 +178,7 @@ function validateStudentData(data) {
     }
 
     // Step 4: Check if student with same faculty+rollno+semester/year already exists
-    const existingStudent = await findOne(existingStudentQuery);
+    const existingStudent = await User.findOne(existingStudentQuery);
 
     if (existingStudent) {
       return res.status(400).json({
@@ -216,8 +194,7 @@ function validateStudentData(data) {
     }
 
     // Step 5: Additional check - Same rollno across different emails in same faculty
-    // This prevents a student from registering with same rollno but different email
-    const sameRollnoDifferentEmail = await findOne({
+    const sameRollnoDifferentEmail = await User.findOne({
       faculty,
       rollno: rollno.toUpperCase().trim(),
       email: { $ne: email.toLowerCase().trim() }
@@ -234,14 +211,13 @@ function validateStudentData(data) {
     }
 
     // Step 6: Check for similar names in same faculty (optional, for fraud prevention)
-    const similarNameInFaculty = await findOne({
+    const similarNameInFaculty = await User.findOne({
       faculty,
-      name: { $regex: new RegExp(name.split(' ')[0], 'i') }, // First name match
+      name: { $regex: new RegExp(name.split(' ')[0], 'i') },
       rollno: { $ne: rollno.toUpperCase().trim() }
     });
 
     if (similarNameInFaculty) {
-      // Just log this, don't block registration
       console.warn(`Potential duplicate name in ${faculty}: ${name}`);
     }
 
@@ -251,20 +227,26 @@ function validateStudentData(data) {
       email: email.toLowerCase().trim(),
       faculty,
       rollno: rollno.toUpperCase().trim(),
-      contact: contact.replace(/\D/g, ''), // Remove non-digits
+      contact: contact.replace(/\D/g, ''),
       address: address.trim(),
       verificationToken: generateVerificationToken(),
-      verificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      verificationExpires: Date.now() + 24 * 60 * 60 * 1000,
       status: 'active'
     };
 
-    // Add conditional fields
+    // Add conditional fields based on faculty type
     if (semesterFaculties.includes(faculty)) {
       userData.semester = parseInt(semester);
-      userData.year = null; // Clear year for semester-based
+      // Don't store year for semester-based faculties
+      delete userData.year;
     } else if (yearlyFaculties.includes(faculty)) {
       userData.year = parseInt(year);
-      userData.semester = null; // Clear semester for yearly-based
+      // Don't store semester for yearly-based faculties
+      delete userData.semester;
+    } else {
+      // Don't store either for other faculties
+      delete userData.semester;
+      delete userData.year;
     }
 
     // Step 8: Create user instance
@@ -298,15 +280,17 @@ function validateStudentData(data) {
       rollno: user.rollno,
       contact: user.contact,
       address: user.address,
-      studentInfo: user.studentInfo,
       qrCode: user.qrCode,
       registrationDate: user.createdAt,
       attendanceCount: user.attendanceLogs?.length || 0
     };
 
-    // If semester/year exists, add to response
-    if (user.semester) userResponse.semester = user.semester;
-    if (user.year) userResponse.year = user.year;
+    // Add appropriate field based on faculty type
+    if (semesterFaculties.includes(user.faculty) && user.semester) {
+      userResponse.semester = user.semester;
+    } else if (yearlyFaculties.includes(user.faculty) && user.year) {
+      userResponse.year = user.year;
+    }
 
     res.status(201).json({
       success: true,
@@ -381,7 +365,7 @@ export async function validateRegistration(req, res) {
 
     // Check email availability
     if (email) {
-      const emailExists = await findOne({ 
+      const emailExists = await User.findOne({ 
         email: email.toLowerCase().trim() 
       });
       
@@ -394,8 +378,6 @@ export async function validateRegistration(req, res) {
     // Check roll number availability with faculty context
     if (rollno && faculty) {
       const cleanRollno = rollno.toUpperCase().trim();
-      const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
-      const yearlyFaculties = ['BBS', 'BA', 'BSW'];
       
       let rollnoQuery = {
         faculty,
@@ -409,7 +391,7 @@ export async function validateRegistration(req, res) {
         rollnoQuery.year = parseInt(year);
       }
 
-      const rollnoExists = await findOne(rollnoQuery);
+      const rollnoExists = await User.findOne(rollnoQuery);
       
       if (rollnoExists) {
         validationResults.rollno.available = false;
@@ -420,7 +402,7 @@ export async function validateRegistration(req, res) {
       }
 
       // Additional check: Same rollno with different email
-      const sameRollnoDiffEmail = await findOne({
+      const sameRollnoDiffEmail = await User.findOne({
         faculty,
         rollno: cleanRollno,
         ...(email ? { email: { $ne: email.toLowerCase().trim() } } : {})
@@ -466,11 +448,14 @@ export async function getStudentByIdentifier(req, res) {
       rollno: rollno.toUpperCase().trim()
     };
 
-    // Add semester/year if provided
-    if (semester) query.semester = parseInt(semester);
-    if (year) query.year = parseInt(year);
+    // Add appropriate field based on faculty type
+    if (semesterFaculties.includes(faculty) && semester) {
+      query.semester = parseInt(semester);
+    } else if (yearlyFaculties.includes(faculty) && year) {
+      query.year = parseInt(year);
+    }
 
-    const student = await findOne(query)
+    const student = await User.findOne(query)
       .select('-verificationToken -verificationExpires -__v -qrData');
 
     if (!student) {
@@ -509,7 +494,7 @@ export async function canRegister(req, res) {
 
     // 1. Check email
     if (email) {
-      const emailExists = await findOne({ email: email.toLowerCase().trim() });
+      const emailExists = await User.findOne({ email: email.toLowerCase().trim() });
       if (emailExists) {
         checks.emailAvailable = false;
         checks.messages.push('Email already registered');
@@ -526,21 +511,19 @@ export async function canRegister(req, res) {
     // 3. Check roll number with faculty context
     if (rollno && faculty) {
       const cleanRollno = rollno.toUpperCase().trim();
-      const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
-      const yearlyFaculties = ['BBS', 'BA', 'BSW'];
       
       let query = { faculty, rollno: cleanRollno };
       
       // Add context based on faculty type
       if (semesterFaculties.includes(faculty)) {
-        if (semester) {
+        if (semester && semester.toString().trim() !== '') {
           query.semester = parseInt(semester);
         } else {
           checks.requirementsMet = false;
           checks.messages.push('Semester is required for this faculty');
         }
       } else if (yearlyFaculties.includes(faculty)) {
-        if (year) {
+        if (year && year.toString().trim() !== '') {
           query.year = parseInt(year);
         } else {
           checks.requirementsMet = false;
@@ -548,7 +531,7 @@ export async function canRegister(req, res) {
         }
       }
 
-      const existingStudent = await findOne(query);
+      const existingStudent = await User.findOne(query);
       if (existingStudent) {
         checks.rollnoAvailable = false;
         checks.messages.push(`Student with roll number ${rollno} already registered in ${faculty}`);
@@ -556,7 +539,7 @@ export async function canRegister(req, res) {
     }
 
     const canRegister = Object.values(checks).every(
-      (check, index) => index < 4 ? check : true // Check first 4 boolean values
+      (check, index) => index < 4 ? check : true
     );
 
     res.status(200).json({
@@ -580,7 +563,7 @@ export async function canRegister(req, res) {
 export async function findDuplicates(req, res) {
   try {
     // Find duplicate roll numbers within same faculty
-    const duplicates = await aggregate([
+    const duplicates = await User.aggregate([
       {
         $group: {
           _id: {
@@ -626,7 +609,7 @@ export async function findDuplicates(req, res) {
 // Batch registration validation
 export async function validateBatchRegistration(req, res) {
   try {
-    const { students } = req.body; // Array of student objects
+    const { students } = req.body;
     
     if (!Array.isArray(students) || students.length === 0) {
       return res.status(400).json({
@@ -654,7 +637,7 @@ export async function validateBatchRegistration(req, res) {
         }
 
         // Check email uniqueness
-        const emailExists = await findOne({ 
+        const emailExists = await User.findOne({ 
           email: student.email.toLowerCase().trim() 
         });
 
@@ -668,9 +651,6 @@ export async function validateBatchRegistration(req, res) {
         }
 
         // Check student uniqueness
-        const semesterFaculties = ['BBA', 'BCA', 'BSC', 'CSIT', 'BITM'];
-        const yearlyFaculties = ['BBS', 'BA', 'BSW'];
-        
         let query = {
           faculty: student.faculty,
           rollno: student.rollno.toUpperCase().trim()
@@ -682,7 +662,7 @@ export async function validateBatchRegistration(req, res) {
           query.year = parseInt(student.year);
         }
 
-        const studentExists = await findOne(query);
+        const studentExists = await User.findOne(query);
 
         if (studentExists) {
           errors.push({

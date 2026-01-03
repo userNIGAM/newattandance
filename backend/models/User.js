@@ -234,7 +234,6 @@ userSchema.pre('save', function(next) {
   };
   
   this.updatedAt = Date.now();
-  next();
 });
 
 // Method to record attendance

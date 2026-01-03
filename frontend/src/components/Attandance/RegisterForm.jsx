@@ -8,8 +8,8 @@ import FacultySelect from "./forms/FacultySelect";
 import QRDisplay from "./forms/QRDisplay";
 import FormButtons from "./forms/FormButtons";
 
-const semesterFaculties = ["BBA", "BCA", "CSIT", "BITM"];
-const yearlyFaculties = ["BBS", "BA", "BSC", "BSW"];
+const semesterFaculties = ["BBA", "BCA", "CSIT", "BITM", "BSC"];
+const yearlyFaculties = ["BBS", "BA", "BSW"];
 
 const RegisterForm = () => {
   const [formData, setFormData] = useState({
@@ -78,9 +78,11 @@ const RegisterForm = () => {
         break;
       case "semester":
         if (isSemesterBased && !value) error = "Please select a semester.";
+        else if (!isSemesterBased && value) error = "Semester is not applicable for this faculty.";
         break;
       case "year":
         if (isYearBased && !value) error = "Please select a year.";
+        else if (!isYearBased && value) error = "Year is not applicable for this faculty.";
         break;
       case "rollno":
         if (!value?.trim()) error = "Roll number is required.";
@@ -88,11 +90,11 @@ const RegisterForm = () => {
         break;
       case "contact":
         if (!value?.trim()) error = "Contact number is required.";
-        else if (!/^\d{7,15}$/.test(value)) error = "Phone number must be 7–15 digits.";
+        else if (!/^(97|98)\d{8}$/.test(value)) error = "Phone must start with 98 and be 10 digits.";
         break;
       case "address":
         if (!value?.trim()) error = "Address is required.";
-        else if (value.length < 10) error = "Address is too short.";
+        else if (value.length < 10) error = "Address is too short (minimum 10 characters).";
         break;
       default:
         break;
@@ -105,8 +107,20 @@ const RegisterForm = () => {
   const validateAllFields = () => {
     const fieldsToValidate = ["name","email","faculty","rollno","contact","address"];
     const faculty = formData.faculty;
-    if (semesterFaculties.includes(faculty)) fieldsToValidate.push("semester");
-    if (yearlyFaculties.includes(faculty)) fieldsToValidate.push("year");
+    
+    if (semesterFaculties.includes(faculty)) {
+      fieldsToValidate.push("semester");
+      // Clear year field for semester-based faculties
+      if (formData.year) {
+        setFormData(prev => ({ ...prev, year: "" }));
+      }
+    } else if (yearlyFaculties.includes(faculty)) {
+      fieldsToValidate.push("year");
+      // Clear semester field for yearly-based faculties
+      if (formData.semester) {
+        setFormData(prev => ({ ...prev, semester: "" }));
+      }
+    }
 
     let isValid = true;
     fieldsToValidate.forEach((f) => {
@@ -124,13 +138,33 @@ const RegisterForm = () => {
       setIsSubmitting(true);
       setErrors({});
 
-      const result = await registerUser(formData);
+      // Prepare data with only the appropriate field based on faculty
+      const dataToSend = { ...formData };
+      const faculty = dataToSend.faculty;
+      
+      if (semesterFaculties.includes(faculty)) {
+        // Remove year field for semester-based faculties
+        delete dataToSend.year;
+      } else if (yearlyFaculties.includes(faculty)) {
+        // Remove semester field for yearly-based faculties
+        delete dataToSend.semester;
+      } else {
+        // Remove both for other faculties
+        delete dataToSend.semester;
+        delete dataToSend.year;
+      }
+
+      const result = await registerUser(dataToSend);
       if (result.qrCode) {
         setUserQR(result.qrCode);
         setSubmitted(true);
       }
     } catch (error) {
-      setErrors({ submit: error.message || "Registration failed. Please try again." });
+      if (error.response?.data?.errors) {
+        setErrors(error.response.data.errors);
+      } else {
+        setErrors({ submit: error.message || "Registration failed. Please try again." });
+      }
     } finally {
       setIsSubmitting(false);
     }
