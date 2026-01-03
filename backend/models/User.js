@@ -203,7 +203,7 @@ userSchema.virtual('formattedDate').get(function() {
 
 // Indexes for better query performance
 userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ rollno: 1 }, { unique: true });
+// Note: rollno already has unique: true in schema, so no duplicate index needed
 userSchema.index({ faculty: 1, semester: 1 });
 userSchema.index({ faculty: 1, year: 1 });
 userSchema.index({ createdAt: -1 });
