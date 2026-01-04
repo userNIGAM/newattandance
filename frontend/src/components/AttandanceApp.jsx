@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { QrCode, UserPlus, ScanLine, Users, Download, Upload } from "lucide-react";
 
 import EventQR from "./Attandance/EventQR";
-import RegisterForm from "./Attandance/RegisterForm";
-import Scanner from "./Scanner"; // Production-ready Scanner
+import RegisterForm from "./RegisterForm/RegisterForm";
+import Scanner from "./Attandance/scanner/Scanner"; // Production-ready Scanner
 import AttendeesList from "./Attandance/AttendeesList";
 
 const AttendanceApp = () => {

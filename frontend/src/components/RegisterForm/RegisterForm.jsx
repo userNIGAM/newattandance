@@ -1,15 +1,14 @@
 import React, { useState } from "react";
-import { User, Mail, Phone, MapPin, Hash } from "lucide-react";
-import { registerUser } from "../../services/Api";
-
-import TextInput from "./forms/TextInput";
-import AddressInput from "./forms/AddressInput";
-import FacultySelect from "./forms/FacultySelect";
-import QRDisplay from "./forms/QRDisplay";
-import FormButtons from "./forms/FormButtons";
-
-const semesterFaculties = ["BBA", "BCA", "CSIT", "BITM", "BSC"];
-const yearlyFaculties = ["BBS", "BA", "BSW"];
+import { registerUser } from "../../services/Api.js";
+import {
+  TextInput,
+  AddressInput,
+  FacultySelect,
+  QRDisplay,
+  FormButtons,
+  SemesterYearSelect,
+} from "./forms";
+import { semesterFaculties, yearlyFaculties } from "./constants";
 
 const RegisterForm = () => {
   const [formData, setFormData] = useState({
@@ -126,13 +125,11 @@ const RegisterForm = () => {
 
     if (semesterFaculties.includes(faculty)) {
       fieldsToValidate.push("semester");
-      // Clear year field for semester-based faculties
       if (formData.year) {
         setFormData((prev) => ({ ...prev, year: "" }));
       }
     } else if (yearlyFaculties.includes(faculty)) {
       fieldsToValidate.push("year");
-      // Clear semester field for yearly-based faculties
       if (formData.semester) {
         setFormData((prev) => ({ ...prev, semester: "" }));
       }
@@ -154,18 +151,14 @@ const RegisterForm = () => {
       setIsSubmitting(true);
       setErrors({});
 
-      // Prepare data with only the appropriate field based on faculty
       const dataToSend = { ...formData };
       const faculty = dataToSend.faculty;
 
       if (semesterFaculties.includes(faculty)) {
-        // Remove year field for semester-based faculties
         delete dataToSend.year;
       } else if (yearlyFaculties.includes(faculty)) {
-        // Remove semester field for yearly-based faculties
         delete dataToSend.semester;
       } else {
-        // Remove both for other faculties
         delete dataToSend.semester;
         delete dataToSend.year;
       }
@@ -175,7 +168,6 @@ const RegisterForm = () => {
         setUserQR(result.qrCode);
         setSubmitted(true);
 
-        // Show email sent message
         if (result.emailSent) {
           alert(
             `✅ Registration successful! QR code has been sent to ${formData.email}`
@@ -226,7 +218,6 @@ const RegisterForm = () => {
       <TextInput
         name="name"
         label="Full Name"
-        icon={<User className="w-4 h-4" />}
         formData={formData}
         handleChange={handleChange}
         handleBlur={handleBlur}
@@ -234,10 +225,10 @@ const RegisterForm = () => {
         required
         disabled={submitted || isSubmitting}
       />
+      
       <TextInput
         name="email"
         label="Email"
-        icon={<Mail className="w-4 h-4" />}
         type="email"
         formData={formData}
         handleChange={handleChange}
@@ -246,19 +237,26 @@ const RegisterForm = () => {
         required
         disabled={submitted || isSubmitting}
       />
+      
       <FacultySelect
         formData={formData}
         handleChange={handleChange}
         handleBlur={handleBlur}
         errors={errors}
-        semesterFaculties={semesterFaculties}
-        yearlyFaculties={yearlyFaculties}
         disabled={submitted || isSubmitting}
       />
+      
+      <SemesterYearSelect
+        formData={formData}
+        handleChange={handleChange}
+        handleBlur={handleBlur}
+        errors={errors}
+        disabled={submitted || isSubmitting}
+      />
+      
       <TextInput
         name="rollno"
         label="Roll Number"
-        icon={<Hash className="w-4 h-4" />}
         formData={formData}
         handleChange={handleChange}
         handleBlur={handleBlur}
@@ -266,10 +264,10 @@ const RegisterForm = () => {
         required
         disabled={submitted || isSubmitting}
       />
+      
       <TextInput
         name="contact"
         label="Contact Number"
-        icon={<Phone className="w-4 h-4" />}
         formData={formData}
         handleChange={handleChange}
         handleBlur={handleBlur}
@@ -277,10 +275,10 @@ const RegisterForm = () => {
         required
         disabled={submitted || isSubmitting}
       />
+      
       <AddressInput
         name="address"
         label="Address"
-        icon={<MapPin className="w-4 h-4" />}
         formData={formData}
         handleChange={handleChange}
         handleBlur={handleBlur}

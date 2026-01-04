@@ -5,12 +5,17 @@ dotenv.config();
 
 console.log('[dotenv] Environment variables loaded');
 console.log('SMTP_USER configured:', process.env.SMTP_USER ? 'Yes' : 'No');
-import express, { json, urlencoded } from 'express';
+import express, { json, urlencoded, static as staticServer } from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 // import { connection } from 'mongoose';
 import userRoutes from './routes/userRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import connectDB from './config/connectDB.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -18,6 +23,9 @@ const app = express();
 app.use(cors());
 app.use(json());
 app.use(urlencoded({ extended: true }));
+
+// Serve static files (for Excel uploads)
+app.use('/uploads', staticServer(path.join(__dirname, 'uploads')));
 
 // Connect to MongoDB
 connectDB();
