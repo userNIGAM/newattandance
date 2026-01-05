@@ -5,7 +5,8 @@ import {
   markAttendance,
   getAttendanceRecords,
   getAttendanceSummary,
-  getStudentAttendanceHistory
+  getStudentAttendanceHistory,
+  getAttendees
 } from '../controllers/attendanceController.js';
 import {
   saveScanDataToExcel,
@@ -19,6 +20,9 @@ router.get('/check-duplicate', checkDuplicateScan);
 
 // Mark attendance when QR is scanned
 router.post('/mark', markAttendance);
+
+// Get all attendees for a date
+router.get('/attendees', getAttendees);
 
 // Get attendance records (with optional filters)
 router.get('/records', getAttendanceRecords);

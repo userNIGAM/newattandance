@@ -66,3 +66,19 @@ export const markAttendance = async (attendanceData) => {
     throw error.response?.data || error;
   }
 };
+
+// Get all attendees for a specific date
+export const getAttendees = async (scanDate, eventId) => {
+  try {
+    const response = await api.get('/attendance/attendees', {
+      params: {
+        scanDate: scanDate, // Format: YYYY-MM-DD
+        ...(eventId && { eventId: eventId })
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching attendees:', error);
+    throw error.response?.data || error;
+  }
+};

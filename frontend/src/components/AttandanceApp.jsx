@@ -4,7 +4,7 @@ import { QrCode, UserPlus, ScanLine, Users, Download, Upload } from "lucide-reac
 import EventQR from "./Attandance/EventQR";
 import RegisterForm from "./RegisterForm/RegisterForm";
 import Scanner from "./Attandance/scanner/Scanner"; // Production-ready Scanner
-import AttendeesList from "./Attandance/AttendeesList";
+import AttendeesList from "./Attendees/AttendeesList";
 
 const AttendanceApp = () => {
   // Initialize state from localStorage

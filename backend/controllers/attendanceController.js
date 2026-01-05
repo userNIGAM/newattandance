@@ -238,3 +238,36 @@ export const getStudentAttendanceHistory = async (req, res) => {
     });
   }
 };
+
+// Get all attendees for today or specific date
+export const getAttendees = async (req, res) => {
+  try {
+    const { scanDate, eventId } = req.query;
+    const todayDate = new Date().toISOString().split('T')[0];
+    const targetDate = scanDate || todayDate;
+
+    let filter = { scanDate: targetDate };
+    
+    if (eventId) {
+      filter.eventId = eventId;
+    }
+
+    const attendees = await Attendance.find(filter)
+      .sort({ scanTime: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: attendees.length,
+      date: targetDate,
+      data: attendees
+    });
+  } catch (error) {
+    console.error('Error fetching attendees:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching attendees',
+      error: error.message
+    });
+  }
+};
