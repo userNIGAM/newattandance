@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 // import jsQR from "jsqr";
 import { checkDuplicateScan, markAttendance } from "../../../services/Api";
+import successSound from "../../../assets/beep-08b.wav";
+import errorSound from "../../../assets/beep-06.mp3";
 
 export function useScanner(currentEvent, onQRScanned) {
     const videoRef = useRef(null);
@@ -91,6 +93,9 @@ export function useScanner(currentEvent, onQRScanned) {
             try {
                 qrData = JSON.parse(qrDataString);
             } catch {
+                const audio = new Audio(errorSound);
+                audio.play().catch(err => console.error("Error playing sound:", err));
+
                 setLastScanResult({
                     type: "error",
                     message: "Invalid QR format."
@@ -99,6 +104,9 @@ export function useScanner(currentEvent, onQRScanned) {
             }
 
             if (!validateQRData(qrData)) {
+                const audio = new Audio(errorSound);
+                audio.play().catch(err => console.error("Error playing sound:", err));
+
                 setLastScanResult({
                     type: "error",
                     message: "QR missing required data."
@@ -132,6 +140,10 @@ export function useScanner(currentEvent, onQRScanned) {
             });
 
             if (attendance.success) {
+                // Play success sound
+                const audio = new Audio(successSound);
+                audio.play().catch(err => console.error("Error playing sound:", err));
+
                 setStats(prev => ({
                     ...prev,
                     todayCount: prev.todayCount + 1,
@@ -153,6 +165,9 @@ export function useScanner(currentEvent, onQRScanned) {
 
                 onQRScanned?.(qrData);
             } else {
+                const audio = new Audio(errorSound);
+                audio.play().catch(err => console.error("Error playing sound:", err));
+
                 setLastScanResult({
                     type: "error",
                     message: attendance.message || "Failed to mark attendance."
